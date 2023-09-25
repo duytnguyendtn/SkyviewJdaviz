@@ -29,7 +29,38 @@
         ></v-select>
       </v-row>
 
-    <j-plugin-section-header>Hello World!</j-plugin-section-header>
+    <j-plugin-section-header>Source Selection</j-plugin-section-header>
+
+      <v-row>
+          <v-text-field
+          v-model="source"
+          label="Source or Coordinates"
+          hint="Enter a source name or Coordinates to center your query on"
+          persistent-hint>
+          </v-text-field>
+      </v-row>
+
+    <j-plugin-section-header>Common Options</j-plugin-section-header>
+
+      <v-row>
+        <v-text-field
+        v-model.number="resolution_pix"
+        type="number"
+        label="Resolution"
+        hint="Minimum resolution in pixels"
+        persistent-hint>
+        </v-text-field>
+      </v-row>
+
+      <v-row>
+        <v-text-field
+        v-model.number="radius_deg"
+        type="number"
+        label="Radius"
+        hint="Angular radius of the specified field in degrees"
+        persistent-hint>
+        </v-text-field>
+      </v-row>
 
     <v-row class="row-no-outside-padding">
         <v-col>

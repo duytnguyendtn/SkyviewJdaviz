@@ -79,16 +79,20 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
                 file,
                 data_label=f"{self.source}_{self.survey_selected}")
         '''
-        self.hub.broadcast(SnackbarMessage(
-                    f"Loading data...", sender=self, color="success"))
-        self.app._jdaviz_helper.load_data(
-                fits.open(sia_results[0].getdataurl()),
-                data_label=f"{self.source}_{self.survey_selected}")
-        self.hub.broadcast(SnackbarMessage(
-            #f"Successfully loaded {len(files)} Skyview product(s) for source {self.source}",
-            f"Successfully loaded 1 Skyview product(s) for source {self.source}",
-            sender=self,
-            color="success"))
+        try:
+            dataurl = sia_results[0].getdataurl()
+            self.app._jdaviz_helper.load_data(
+                    fits.open(dataurl),
+                    data_label=f"{self.source}_{self.resource_selected}")
+            self.hub.broadcast(SnackbarMessage(
+                #f"Successfully loaded {len(files)} Skyview product(s) for source {self.source}",
+                f"Successfully loaded 1 Skyview product(s) for source {self.source}",
+                sender=self,
+                color="success"))
+        except:
+            self.hub.broadcast(SnackbarMessage(
+                f"Unable to load file to viewer: {dataurl}: {e}", sender=self, color="error"))
+            raise
         
         
     def submit_pyvo_request(self):

@@ -22,6 +22,7 @@
           :menu-props="{ left: true }"
           attach
           :items="resources"
+          :loading="resources_loading"
           @change="resource_selected"
           label="Available Resources"
           hint="Select a SIA resource to query"
@@ -54,7 +55,25 @@
 
     <v-row class="row-no-outside-padding">
         <v-col>
-            <v-btn color="primary" text @click="submit_request">Search SkyView</v-btn>
+            <v-btn color="primary" :loading="results_loading" text @click="submit_request">Query Archive</v-btn>
+        </v-col>
+    </v-row>
+
+    <v-row>
+      <v-data-table
+        :headers="headers"
+        v-model="selected_results"
+        :items="visible_results"
+        item-key="URL"
+        items-per-page=5
+        show-select
+        dense
+      ></v-data-table>
+    </v-row>
+
+    <v-row class="row-no-outside-padding">
+        <v-col>
+            <v-btn color="primary" :loading="data_loading" text @click="load_selected_data">Load Data</v-btn>
         </v-col>
     </v-row>
 

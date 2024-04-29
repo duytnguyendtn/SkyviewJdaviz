@@ -19,9 +19,17 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
 
     wavebands = List().tag(sync=True)
     resources = List().tag(sync=True)
+    resources_loading = Bool().tag(sync=True)
 
     source = Unicode().tag(sync=True)
     radius_deg = Int().tag(sync=True)
+
+    headers = List().tag(sync=True)
+    results_loading = Bool().tag(sync=True)
+    visible_results = List().tag(sync=True)
+    selected_results = List().tag(sync=True)
+
+    data_loading = Bool().tag(sync=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -31,17 +39,40 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
         self._full_registry_results = None
 
         self.resources = []
+        self.resources_loading = False
         self.resource_selected = None
 
-        self.radius_deg = 0
+        self.radius_deg = 1
+
+        self.results_loading = False
+        self.headers = [
+            {"text": 'Title', "value": 'title'},
+            {"text": 'Instrument', "value": "instr"},
+            {"text": 'DateObs', "value": "dateobs"},
+            {"text": 'Data URL', "value": 'URL'}            
+        ]
+        self.visible_results = [{"URL": "TestURL", "instr": "TestDet", "title": "Test"}]
+        self.visible_results = self.visible_results + [{"URL": "TestURL2", "instr": "TestDet2", "title": "Test2"}]
+
+        self.data_loading = False
 
 
     def vue_waveband_selected(self,event):
         """Sync waveband selected"""
         self.waveband_selected = event
-        if event is not None:
-            self._full_registry_results = registry.search(registry.Servicetype("sia"), registry.Waveband(self.waveband_selected))
-            self.resources = list(self._full_registry_results.getcolumn("short_name"))
+        # Clear existing resources list
+        self.resources = []
+        self.resource_selected = None
+        self.resources_loading = True
+        try:
+            if event is not None:
+                self._full_registry_results = registry.search(registry.Servicetype("sia"), registry.Waveband(self.waveband_selected))
+                self.resources = list(self._full_registry_results.getcolumn("short_name"))
+        except Exception:
+            # TODO: Catch connection error
+            raise
+        finally:
+            self.resources_loading = False
 
     def vue_resource_selected(self, event):
         """Sync IVOA resource selected"""
@@ -49,6 +80,8 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
 
 
     def vue_submit_request(self, *args, **kwargs):
+        self.visible_results = []
+        self.results_loading = True
         try:
             sia_service = self._full_registry_results[self.resource_selected].get_service(service_type="sia")
             try:
@@ -71,29 +104,33 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
             self.hub.broadcast(SnackbarMessage(
                 f"Unable to locate files for source {self.source}: {e}", sender=self, color="error"))
             raise
+        finally:
+            self.results_loading = False
 
         print(f"SIA results found: {sia_results}")
-        '''
-        for file in files:
-            self.app._jdaviz_helper.load_data(
-                file,
-                data_label=f"{self.source}_{self.survey_selected}")
-        '''
         try:
-            dataurl = sia_results[0].getdataurl()
-            self.app._jdaviz_helper.load_data(
-                    fits.open(dataurl),
-                    data_label=f"{self.source}_{self.resource_selected}")
+            for result in sia_results:
+                self.visible_results = self.visible_results + [{"title": str(result.title), "URL": str(result.getdataurl()), "instr": str(result.instr), "dateobs": str(result.dateobs)}]
             self.hub.broadcast(SnackbarMessage(
-                #f"Successfully loaded {len(files)} Skyview product(s) for source {self.source}",
-                f"Successfully loaded 1 Skyview product(s) for source {self.source}",
-                sender=self,
-                color="success"))
-        except:
+                    f"{len(sia_results)} SIA results populated!", sender=self, color="success"))
+        except Exception as e:
             self.hub.broadcast(SnackbarMessage(
-                f"Unable to load file to viewer: {dataurl}: {e}", sender=self, color="error"))
+                f"Unable to populate table for source {self.source}: {e}", sender=self, color="error"))
             raise
-        
+
+
+    def vue_load_selected_data(self,event):
+        self.data_loading = True
+        for entry in self.selected_results:
+            try:
+                self.app._jdaviz_helper.load_data(
+                    fits.open(str(entry["URL"])),
+                    data_label=f"{self.source}_{self.resource_selected}_{entry['title']}")
+            except Exception as e:
+                self.hub.broadcast(SnackbarMessage(
+                    f"Unable to load file to viewer: {entry['URL']}: {e}", sender=self, color="error"))
+        self.data_loading = False
+        self.selected_results = []
         
     def submit_pyvo_request(self):
         pass

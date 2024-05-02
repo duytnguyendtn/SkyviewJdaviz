@@ -7,13 +7,13 @@ from traitlets import Dict, Bool, Unicode, Any, List, Int
 
 from jdaviz.core.events import SnackbarMessage
 from jdaviz.core.registries import tray_registry
-from jdaviz.core.template_mixin import PluginTemplateMixin, AddResultsMixin
+from jdaviz.core.template_mixin import PluginTemplateMixin, AddResultsMixin, TableMixin
 
 __all__ = ['PyVoPlugin']
 
 
 @tray_registry('PyVoPlugin', label="PyVO Plugin")
-class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
+class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
     """ Plugin to query PyVO and load data into Imviz """
     template_file = __file__, "pyvo.vue"
 
@@ -24,11 +24,7 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
     source = Unicode().tag(sync=True)
     radius_deg = Int().tag(sync=True)
 
-    headers = List().tag(sync=True)
     results_loading = Bool().tag(sync=True)
-    visible_results = List().tag(sync=True)
-    selected_results = List().tag(sync=True)
-
     data_loading = Bool().tag(sync=True)
 
     def __init__(self, *args, **kwargs):
@@ -45,14 +41,13 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
         self.radius_deg = 1
 
         self.results_loading = False
-        self.headers = [
-            {"text": 'Title', "value": 'title'},
-            {"text": 'Instrument', "value": "instr"},
-            {"text": 'DateObs', "value": "dateobs"},
-            {"text": 'Data URL', "value": 'URL'}            
-        ]
-        self.visible_results = [{"URL": "TestURL", "instr": "TestDet", "title": "Test"}]
-        self.visible_results = self.visible_results + [{"URL": "TestURL2", "instr": "TestDet2", "title": "Test2"}]
+
+        self.table.headers_avail = ["Title", "Instrument", "DateObs", "URL"]
+        self.table.headers_visible = ["Title", "Instrument", "DateObs"]
+
+        self.table.show_select = True
+        self.table.item_key = "URL"
+        self.table.add_item({"URL": "TestURL", "Instrument": "TestDet", "Title": "Test"})
 
         self.data_loading = False
 
@@ -79,8 +74,8 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
         self.resource_selected = event
 
 
-    def vue_submit_request(self, *args, **kwargs):
-        self.visible_results = []
+    def vue_query_resource(self, *args, **kwargs):
+        self.table.items = []
         self.results_loading = True
         try:
             sia_service = self._full_registry_results[self.resource_selected].get_service(service_type="sia")
@@ -110,7 +105,7 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
         print(f"SIA results found: {sia_results}")
         try:
             for result in sia_results:
-                self.visible_results = self.visible_results + [{"title": str(result.title), "URL": str(result.getdataurl()), "instr": str(result.instr), "dateobs": str(result.dateobs)}]
+                self.table.add_item({"Title": str(result.title), "URL": str(result.getdataurl()), "Instrument": str(result.instr), "DateObs": str(result.dateobs)})
             self.hub.broadcast(SnackbarMessage(
                     f"{len(sia_results)} SIA results populated!", sender=self, color="success"))
         except Exception as e:
@@ -121,16 +116,16 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin):
 
     def vue_load_selected_data(self,event):
         self.data_loading = True
-        for entry in self.selected_results:
+        for entry in self.table.selected_results:
             try:
                 self.app._jdaviz_helper.load_data(
                     fits.open(str(entry["URL"])),
-                    data_label=f"{self.source}_{self.resource_selected}_{entry['title']}")
+                    data_label=f"{self.source}_{self.resource_selected}_{entry['Title']}")
             except Exception as e:
                 self.hub.broadcast(SnackbarMessage(
                     f"Unable to load file to viewer: {entry['URL']}: {e}", sender=self, color="error"))
         self.data_loading = False
-        self.selected_results = []
+        self.table.selected_results = []
         
     def submit_pyvo_request(self):
         pass

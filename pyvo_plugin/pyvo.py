@@ -18,29 +18,24 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
     template_file = __file__, "pyvo.vue"
 
     wavebands = List().tag(sync=True)
-    resources = List().tag(sync=True)
-    resources_loading = Bool().tag(sync=True)
+    resources = List([]).tag(sync=True)
+    resources_loading = Bool(False).tag(sync=True)
 
     source = Unicode().tag(sync=True)
-    radius_deg = Int().tag(sync=True)
+    radius_deg = Int(1).tag(sync=True)
 
-    results_loading = Bool().tag(sync=True)
-    data_loading = Bool().tag(sync=True)
+    results_loading = Bool(False).tag(sync=True)
+    data_loading = Bool(False).tag(sync=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Waveband properties to filter available registry resources
         self.wavebands = [w.lower() for w in vocabularies.get_vocabulary("messenger")["terms"]]
         self.waveband_selected = None
+
         self._full_registry_results = None
-
-        self.resources = []
-        self.resources_loading = False
         self.resource_selected = None
-
-        self.radius_deg = 1
-
-        self.results_loading = False
 
         self.table.headers_avail = ["Title", "Instrument", "DateObs", "URL"]
         self.table.headers_visible = ["Title", "Instrument", "DateObs"]
@@ -48,8 +43,6 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
         self.table.show_select = True
         self.table.item_key = "URL"
         self.table.add_item({"URL": "TestURL", "Instrument": "TestDet", "Title": "Test"})
-
-        self.data_loading = False
 
 
     def vue_waveband_selected(self,event):

@@ -44,14 +44,18 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
         self.table.item_key = "URL"
         self.table.add_item({"URL": "TestURL", "Instrument": "TestDet", "Title": "Test"})
 
-
     def vue_waveband_selected(self,event):
-        """Sync waveband selected"""
+        """ Sync waveband selected
+
+        When the user selects a waveband, query Virtual Observatory registry
+        for all SIA services that serve data in that waveband. Then update
+        the dropdown accordingly.
+        """
         self.waveband_selected = event
         # Clear existing resources list
         self.resources = []
         self.resource_selected = None
-        self.resources_loading = True
+        self.resources_loading = True # Start loading bar
         try:
             if event is not None:
                 self._full_registry_results = registry.search(registry.Servicetype("sia"), registry.Waveband(self.waveband_selected))
@@ -60,31 +64,44 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
             # TODO: Catch connection error
             raise
         finally:
-            self.resources_loading = False
+            self.resources_loading = False # Stop loading bar
 
     def vue_resource_selected(self, event):
         """Sync IVOA resource selected"""
         self.resource_selected = event
 
-
     def vue_query_resource(self, *args, **kwargs):
+        """
+        Once a specific VO resource is selected, query it with the user-specified source target.
+        User input for source is first attempted to be parsed as a SkyCoord coordinate. If not,
+        then attempts to parse as a target name.
+        """
         self.table.items = []
-        self.results_loading = True
+        self.results_loading = True # Start loading spinner
         try:
+            # Query SIA service
+            # Service is indexed via short name (resource_selected), which is the suggested way
+            # according to PyVO docs. Though disclaimer that collisions COULD occur. If so,
+            # consider indexing on the full IVOID, which is guaranteed unique.
             sia_service = self._full_registry_results[self.resource_selected].get_service(service_type="sia")
             try:
+                # First parse user-provided source as direct coordinates
                 coord = SkyCoord(self.source)
             except:
                 try:
+                    # If that didn't work, try parsing it as an object name
                     coord = SkyCoord.from_name(self.source)
                 except:
                     raise LookupError(f"Unable to resolve source coordinates: {self.source}")
 
-            sia_results = sia_service.search(coord,
-                                             size=((self.radius_deg * u.deg) if self.radius_deg > 0 else None),
-                                             format='image/fits')
+            # Once coordinate lookup is complete, search service using these coords.
+            sia_results = sia_service.search(
+                    coord,
+                    size=((self.radius_deg * u.deg) if self.radius_deg > 0 else None),
+                    format='image/fits')
             if len(sia_results) == 0:
-                raise RuntimeError("No observations returned")
+                self.hub.broadcast(SnackbarMessage(
+                    f"No observations returned at coords {coord} from VO SIA resource: {sia_service.SOMETHING}", sender=self, color="error"))
             else:
                 self.hub.broadcast(SnackbarMessage(
                     f"{len(sia_results)} SIA results found!", sender=self, color="success"))
@@ -93,12 +110,14 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
                 f"Unable to locate files for source {self.source}: {e}", sender=self, color="error"))
             raise
         finally:
-            self.results_loading = False
+            self.results_loading = False # Stop loading spinner
 
-        print(f"SIA results found: {sia_results}")
         try:
             for result in sia_results:
-                self.table.add_item({"Title": str(result.title), "URL": str(result.getdataurl()), "Instrument": str(result.instr), "DateObs": str(result.dateobs)})
+                self.table.add_item({"Title": str(result.title),
+                                     "URL": str(result.getdataurl()),
+                                     "Instrument": str(result.instr),
+                                     "DateObs": str(result.dateobs)})
             self.hub.broadcast(SnackbarMessage(
                     f"{len(sia_results)} SIA results populated!", sender=self, color="success"))
         except Exception as e:
@@ -106,19 +125,17 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
                 f"Unable to populate table for source {self.source}: {e}", sender=self, color="error"))
             raise
 
-
     def vue_load_selected_data(self,event):
-        self.data_loading = True
+        """Load the files selected by the user in the table"""
+        self.data_loading = True # Start loading spinner
         for entry in self.table.selected_results:
             try:
                 self.app._jdaviz_helper.load_data(
-                    fits.open(str(entry["URL"])),
+                    fits.open(str(entry["URL"])), # Open URL as FITS object
                     data_label=f"{self.source}_{self.resource_selected}_{entry['Title']}")
             except Exception as e:
                 self.hub.broadcast(SnackbarMessage(
                     f"Unable to load file to viewer: {entry['URL']}: {e}", sender=self, color="error"))
-        self.data_loading = False
+        # Clear selected entries' checkboxes on table
         self.table.selected_results = []
-        
-    def submit_pyvo_request(self):
-        pass
+        self.data_loading = False # Stop loading spinner

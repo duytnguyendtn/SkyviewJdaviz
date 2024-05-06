@@ -40,7 +40,7 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
         self.table.headers_avail = ["Title", "Instrument", "DateObs", "URL"]
         self.table.headers_visible = ["Title", "Instrument", "DateObs"]
 
-        self.table.show_select = True
+        self.table.show_rowselect = True
         self.table.item_key = "URL"
         self.table.add_item({"URL": "TestURL", "Instrument": "TestDet", "Title": "Test"})
 
@@ -128,7 +128,7 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
     def vue_load_selected_data(self,event):
         """Load the files selected by the user in the table"""
         self.data_loading = True # Start loading spinner
-        for entry in self.table.selected_results:
+        for entry in self.table.selected_rows:
             try:
                 self.app._jdaviz_helper.load_data(
                     fits.open(str(entry["URL"])), # Open URL as FITS object
@@ -137,5 +137,5 @@ class PyVoPlugin(PluginTemplateMixin, AddResultsMixin, TableMixin):
                 self.hub.broadcast(SnackbarMessage(
                     f"Unable to load file to viewer: {entry['URL']}: {e}", sender=self, color="error"))
         # Clear selected entries' checkboxes on table
-        self.table.selected_results = []
+        self.table.selected_rows = []
         self.data_loading = False # Stop loading spinner
